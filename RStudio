@@ -1,0 +1,76 @@
+setwd("~/Desktop/Sentiment")
+
+install.packages("caret",dependencies = c("Depends", "Suggests")) 
+
+library(caret)
+library(arules)
+library(readr)
+library(corrplot)
+
+iPhone<- read.csv("iPhoneMatrix.csv", header = TRUE, stringsAsFactors = FALSE)
+
+summary(iPhone)
+
+iPhone$id<-NULL
+
+cor(iPhone)
+correlationmatrix<- cor(iPhone)
+corrplot(correlationmatrix, method="circle")
+corrplot(cor(iPhone), order ="hclust")
+
+trainSize<- round(nrow(iPhone) * 0.7)
+testSize<- nrow(iPhone) - trainSize
+training_indices<- sample(seq_len(nrow(iPhone)), size = trainSize)
+trainSet<- iPhone[training_indices, ]
+testSet<- iPhone[-training_indices, ]
+model<- lm(formula = trainSet$iphoneSentiment ~ . , data = trainSet)
+summary(model)
+
+descrCor <- cor(iPhone)
+summary(descrCor[upper.tri(descrCor)])  
+highlyCorDescr <- findCorrelation(descrCor, cutoff = .80)
+iPhoneFilter <- iPhone[, -highlyCorDescr]
+summary(iPhoneFilter)
+str(iPhoneFilter)
+
+set.seed(123)
+trainSize3 <- round(nrow(iPhone) * 0.7)
+testSize3 <- nrow(iPhone) - trainSize3
+training_indices3 <- sample(seq_len(nrow(iPhone)), size = trainSize3)
+trainSet3 <- iPhone[training_indices3, ]
+testSet3 <- iPhone[-training_indices3, ]
+
+fitControl <- trainControl(method="repeatedcv", number=10, repeats=10)
+rfFit1 <- train(iphoneSentiment~., data=trainSet, method="rf", trControl=fitControl)
+predictors(rfFit1)
+
+randomSample = function(df,n) { 
+  return (df[sample(nrow(df), n),])
+}
+
+iPhoneSampleFilter<-randomSample(iPhoneFilter, 4000)
+
+iPhoneSampleFilter$iphoneSentiment <- discretize(iPhoneSampleFilter$iphoneSentiment, "fixed", categories= c(-Inf, -50, -10, -1, 1, 10, 50, Inf),
+                                                 labels = c("veryNeg", "Neg", "someNeg", "Netural", "somePos", "Pos", "verPos"))
+summary(iPhoneSampleFilter)
+summary(iPhoneSampleFilter)
+
+set.seed(123)
+
+#Create training/testing set sizes
+inTraining <- createDataPartition(iPhoneSampleFilter$iphoneSentiment, p = .70, list = FALSE)
+
+training <- iPhoneSampleFilter[inTraining,]
+testing <- iPhoneSampleFilter[-inTraining,]
+
+#10 Fold Cross Validation
+fitControl <- trainControl(method="repeatedcv", number=10, repeats=10)
+
+KNNGrid <- expand.grid(k=c(1:100))
+KNNGrid
+
+knnFit1 <- train(iphoneSentiment~., data=training, method="knn",tuneGrid=KNNGrid,trControl=fitControl)
+
+prediction<- predict(knnFit1, newdata=testing)
+postResample(prediction,testing$iphoneSentiment)
+summary(prediction)
